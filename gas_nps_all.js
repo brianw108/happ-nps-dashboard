@@ -22,32 +22,34 @@ const PROPS = PropertiesService.getScriptProperties();
 
 
 // ================================================================
-// SQL — 直接抓 comments 表，欄位順序對應 NPS評價 工作表
+// SQL — JOIN v2025_orders，欄位順序對應 NPS評價 工作表
 // ================================================================
-// NPS評價 工作表欄位順序（第一列 header）：
-//   A:ID  B:Order ID  C:Space ID  D:Score  E:Can  F:Comment
-//   G:Created At  H:Activity  I:Is Pay  J:People  K:Need Reply
+// 欄位對應（共 18 欄）：
+//   A(0):ID  B(1):Order ID  C(2):Space ID  D(3):Score  E(4):Can
+//   F(5):Comment  G(6):Created At  H(7):Activity  I(8):Is Pay
+//   J(9):People  K(10):Need Reply  L-Q(11-16):NULL 補位
+//   R(17):Order→Start  ← 與歷史資料位置一致，Dashboard 以此為日期基準
 // ================================================================
 function buildSQL(dateStr) {
-  // 資料庫：MySQL（Treerful）
-  // created_at 已是台北時間，DATE_FORMAT 轉成 '2026/5/6, 10:44' 格式
-  // activity 欄位存數字 ID，mapping 在 Google Sheets 處理
   return `
 SELECT
-  id,
-  order_id,
-  space_id,
-  score,
-  can,
-  comment,
-  DATE_FORMAT(created_at, '%Y/%c/%e, %H:%i') AS created_at,
-  activity,
-  is_pay,
-  people,
-  need_reply
-FROM comments
-WHERE DATE(created_at) = '${dateStr}'
-ORDER BY id ASC
+  c.id,
+  c.order_id,
+  c.space_id,
+  c.score,
+  c.can,
+  c.comment,
+  DATE_FORMAT(c.created_at, '%Y/%c/%e, %H:%i') AS created_at,
+  c.activity,
+  c.is_pay,
+  c.people,
+  c.need_reply,
+  NULL, NULL, NULL, NULL, NULL, NULL,
+  DATE_FORMAT(o.\`start\`, '%Y/%c/%e, %H:%i') AS order_start
+FROM comments c
+LEFT JOIN v2025_orders o ON o.id = c.order_id
+WHERE DATE(c.created_at) = '${dateStr}'
+ORDER BY c.id ASC
 `.trim();
 }
 
