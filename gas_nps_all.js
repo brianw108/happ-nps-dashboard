@@ -216,7 +216,7 @@ function getStatusData() {
 function getAllRecords() {
   const ss       = SpreadsheetApp.openById(PROPS.getProperty('SHEET_ID'));
   const npsSheet = ss.getSheetByName(PROPS.getProperty('RAW_SHEET') || 'NPS評價');
-  const npsVals  = npsSheet.getDataRange().getValues();
+  const npsVals  = npsSheet.getDataRange().getDisplayValues();  // 讀顯示文字，時區與 CSV 匯出一致
   const records  = [];
 
   for (let i = 1; i < npsVals.length; i++) {
@@ -224,7 +224,10 @@ function getAllRecords() {
     if (!row[0]) continue;
 
     const people    = parseInt(row[9]) || 0;
-    const dateParts = parseDateStr(row[6]);   // 傳原始值，支援 Date 物件與字串
+    // R欄(index 17): Order→Start 訂單使用時間（時間基準）
+    // 若 R 欄為空（每日新 sync 的 row 尚未有此欄位），fallback 到 G欄(index 6) Created At
+    const rawDate   = row[17] || row[6];
+    const dateParts = parseDateStr(rawDate);
 
     records.push({
       s:    parseInt(row[3]) || 0,
@@ -233,8 +236,8 @@ function getAllRecords() {
       q:    dateParts.q,
       m:    dateParts.m,
       w:    dateParts.w,
-      b:    String(row[11] || ''),   // L: 分館名稱
-      sp:   String(row[12] || ''),   // M: 空間名稱
+      b:    String(row[29] || ''),   // AD: 分館名稱
+      sp:   String(row[30] || ''),   // AE: 空間名稱
       si:   row[2],                  // C: Space ID
       a:    String(row[7] || ''),    // H: Activity
       p:    people,
@@ -246,9 +249,16 @@ function getAllRecords() {
     });
   }
 
+  // 計算資料的最小/最大日期（直接從 d 欄位取得）
+  const dDates = records.map(r => r.d).filter(Boolean).sort();
+  const minDate = dDates[0]   || '';
+  const maxDate = dDates[dDates.length - 1] || '';
+
   return {
     records:   records,
     count:     records.length,
+    minDate:   minDate,
+    maxDate:   maxDate,
     updatedAt: new Date().toISOString()
   };
 }
