@@ -463,6 +463,36 @@ function testActivityMapping() {
   }
 }
 
+// 測試 5：找出 V2025 Orders 表的 MySQL table 名稱和所有欄位（用於更新 JOIN SQL）
+// 執行後看 Logger，記下 table 名稱和需要的欄位名稱
+function discoverV2025Schema() {
+  try {
+    const session = getMetabaseSession();
+    // table ID 1345 = V2025 Orders（從 Metabase question URL 中解析出來）
+    const url = PROPS.getProperty('METABASE_URL') + '/api/table/1345/query_metadata';
+    const resp = UrlFetchApp.fetch(url, {
+      headers: { 'X-Metabase-Session': session },
+      muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() !== 200) {
+      Logger.log('❌ HTTP ' + resp.getResponseCode() + ': ' + resp.getContentText().slice(0, 300));
+      return;
+    }
+    const meta = JSON.parse(resp.getContentText());
+    Logger.log('=== V2025 Orders Table ===');
+    Logger.log('Metabase Table ID : ' + meta.id);
+    Logger.log('MySQL Table Name  : ' + meta.name);
+    Logger.log('Schema            : ' + (meta.schema || '（無）'));
+    Logger.log('');
+    Logger.log('--- 所有欄位 (Metabase ID → MySQL column name → 顯示名稱) ---');
+    meta.fields.forEach(f => {
+      Logger.log(`[${f.id}]  ${f.name}  →  "${f.display_name}"  (${f.base_type})`);
+    });
+  } catch(e) {
+    Logger.log('❌ 失敗：' + e.message);
+  }
+}
+
 // 測試 5：找出 comments 表的 Metabase 內部 ID 和所有欄位 ID
 function testDiscoverIds() {
   try {
