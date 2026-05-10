@@ -463,31 +463,42 @@ function testActivityMapping() {
   }
 }
 
-// 測試 5：找出 V2025 Orders 表的 MySQL table 名稱和所有欄位（用於更新 JOIN SQL）
-// 執行後看 Logger，記下 table 名稱和需要的欄位名稱
-function discoverV2025Schema() {
+// 測試 5：直接執行 Metabase card 2963，印出欄位名稱 + 第一筆資料
+// 執行後看 Logger，確認欄位順序，再更新 sync 和 getAllRecords() 的 column index
+function testCardQuery() {
   try {
     const session = getMetabaseSession();
-    // table ID 1345 = V2025 Orders（從 Metabase question URL 中解析出來）
-    const url = PROPS.getProperty('METABASE_URL') + '/api/table/1345/query_metadata';
+    const CARD_ID = 2963;  // DB - Weekly NPS and count over time
+    const url = PROPS.getProperty('METABASE_URL') + '/api/card/' + CARD_ID + '/query';
+    Logger.log('呼叫 card ' + CARD_ID + ' ...');
     const resp = UrlFetchApp.fetch(url, {
-      headers: { 'X-Metabase-Session': session },
+      method: 'post',
+      headers: {
+        'X-Metabase-Session': session,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify({}),
       muteHttpExceptions: true
     });
-    if (resp.getResponseCode() !== 200) {
-      Logger.log('❌ HTTP ' + resp.getResponseCode() + ': ' + resp.getContentText().slice(0, 300));
+    if (resp.getResponseCode() !== 200 && resp.getResponseCode() !== 202) {
+      Logger.log('❌ HTTP ' + resp.getResponseCode() + ': ' + resp.getContentText().slice(0, 500));
       return;
     }
-    const meta = JSON.parse(resp.getContentText());
-    Logger.log('=== V2025 Orders Table ===');
-    Logger.log('Metabase Table ID : ' + meta.id);
-    Logger.log('MySQL Table Name  : ' + meta.name);
-    Logger.log('Schema            : ' + (meta.schema || '（無）'));
-    Logger.log('');
-    Logger.log('--- 所有欄位 (Metabase ID → MySQL column name → 顯示名稱) ---');
-    meta.fields.forEach(f => {
-      Logger.log(`[${f.id}]  ${f.name}  →  "${f.display_name}"  (${f.base_type})`);
+    const body = JSON.parse(resp.getContentText());
+    const cols = (body.data && body.data.cols) ? body.data.cols : [];
+    const rows = (body.data && body.data.rows) ? body.data.rows : [];
+
+    Logger.log('=== Card ' + CARD_ID + ' 欄位清單 ===');
+    cols.forEach((c, i) => {
+      Logger.log(`[${i}] ${c.name}  →  display: "${c.display_name}"  type: ${c.base_type}`);
     });
+    Logger.log('');
+    Logger.log('=== 共 ' + rows.length + ' 筆，第一筆資料 ===');
+    if (rows.length > 0) {
+      rows[0].forEach((v, i) => {
+        Logger.log(`[${i}] ${cols[i]?.name}: ${JSON.stringify(v)}`);
+      });
+    }
   } catch(e) {
     Logger.log('❌ 失敗：' + e.message);
   }
