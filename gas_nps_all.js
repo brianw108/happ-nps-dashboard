@@ -245,6 +245,7 @@ function getAllRecords() {
       p:    people,
       pg:   getPeopleGroup(people),
       c:    String(row[5] || ''),    // F: Comment
+      grp:  ({'一組':'1','二組':'2','三組':'3','四組':'4'}[String(row[33]||'').trim()]||''),  // AH: 組別
       cat:  '',
       sub:  '',
       tags: []
@@ -503,6 +504,114 @@ function testCardQuery() {
     }
   } catch(e) {
     Logger.log('❌ 失敗：' + e.message);
+  }
+}
+
+// ================================================================
+// 診斷：確認工作表狀態 + getAllRecords 是否正常
+// ================================================================
+function debugSheetAndRecords() {
+  try {
+    const sheet = getNpsSheet();
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    Logger.log('=== 工作表基本資訊 ===');
+    Logger.log('總行數（含標題）：' + lastRow);
+    Logger.log('總列數：' + lastCol);
+
+    // 讀取前 3 筆資料（display values）
+    if (lastRow >= 2) {
+      const sample = sheet.getRange(2, 1, Math.min(3, lastRow - 1), lastCol).getDisplayValues();
+      Logger.log('--- 前 3 筆 display values ---');
+      sample.forEach((row, i) => {
+        Logger.log('Row ' + (i + 2) + ': A=' + row[0] + '  G(6)=' + row[6] + '  R(17)=' + (row[17]||'(空)'));
+      });
+
+      // 讀取最後 3 筆
+      const startR = Math.max(2, lastRow - 2);
+      const tail = sheet.getRange(startR, 1, lastRow - startR + 1, lastCol).getDisplayValues();
+      Logger.log('--- 最後 ' + tail.length + ' 筆 display values ---');
+      tail.forEach((row, i) => {
+        Logger.log('Row ' + (startR + i) + ': A=' + row[0] + '  G(6)=' + row[6] + '  R(17)=' + (row[17]||'(空)'));
+      });
+    }
+
+    // 呼叫 getAllRecords 並印出統計
+    Logger.log('--- getAllRecords() 結果 ---');
+    const result = getAllRecords();
+    Logger.log('records.length: ' + result.records.length);
+    Logger.log('minDate: ' + result.minDate);
+    Logger.log('maxDate: ' + result.maxDate);
+
+    // 檢查 d 欄位是否空白
+    const emptyD = result.records.filter(r => !r.d).length;
+    const validD = result.records.filter(r => r.d).length;
+    Logger.log('d 有效筆數: ' + validD + '  d 空白筆數: ' + emptyD);
+
+    // 印出前 3 筆
+    Logger.log('前 3 筆 records：');
+    result.records.slice(0, 3).forEach((r, i) =>
+      Logger.log('  [' + i + '] d=' + r.d + '  s=' + r.s + '  b=' + r.b + '  sp=' + r.sp));
+
+  } catch(e) {
+    Logger.log('❌ debugSheetAndRecords 錯誤：' + e.message + '\n' + e.stack);
+  }
+}
+
+// ================================================================
+// 修復：如果 R 欄位日期格式在 cleanup 後損壞，可執行此函式重新寫入字串格式
+// ================================================================
+function fixRColumnFormat() {
+  try {
+    const sheet = getNpsSheet();
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2) { Logger.log('工作表空白'); return; }
+
+    // 讀取 R 欄（index 17, column 18）的 getValues()
+    const rVals = sheet.getRange(2, 18, lastRow - 1, 1).getValues();
+    const fixes = [];
+
+    rVals.forEach((row, i) => {
+      const v = row[0];
+      if (Object.prototype.toString.call(v) === '[object Date]') {
+        // Date 物件 → 轉成字串 "yyyy/M/d, H:mm"
+        const str = Utilities.formatDate(v, 'Asia/Taipei', 'yyyy/M/d, H:mm');
+        fixes.push({ rowIdx: i + 2, val: str });
+      }
+    });
+
+    if (fixes.length === 0) {
+      Logger.log('✅ R 欄無需修復（無 Date 物件）');
+    } else {
+      Logger.log('需修復 ' + fixes.length + ' 筆 R 欄 Date → 字串');
+      fixes.forEach(f => {
+        sheet.getRange(f.rowIdx, 18).setValue(f.val);
+      });
+      Logger.log('✅ R 欄修復完成');
+    }
+
+    // 同樣處理 G 欄（index 6, column 7）
+    const gVals = sheet.getRange(2, 7, lastRow - 1, 1).getValues();
+    const gFixes = [];
+    gVals.forEach((row, i) => {
+      const v = row[0];
+      if (Object.prototype.toString.call(v) === '[object Date]') {
+        const str = Utilities.formatDate(v, 'Asia/Taipei', 'yyyy/M/d, H:mm');
+        gFixes.push({ rowIdx: i + 2, val: str });
+      }
+    });
+    if (gFixes.length === 0) {
+      Logger.log('✅ G 欄無需修復');
+    } else {
+      Logger.log('需修復 ' + gFixes.length + ' 筆 G 欄 Date → 字串');
+      gFixes.forEach(f => {
+        sheet.getRange(f.rowIdx, 7).setValue(f.val);
+      });
+      Logger.log('✅ G 欄修復完成');
+    }
+  } catch(e) {
+    Logger.log('❌ fixRColumnFormat 錯誤：' + e.message);
   }
 }
 
